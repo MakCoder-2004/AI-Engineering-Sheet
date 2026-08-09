@@ -4,7 +4,7 @@ Covers the process of fine-tuning pretrained language models for specific tasks 
 
 ## Files in This Section
 
-- **[01_Fine_Tuning_LLMs.md](01_Fine_Tuning_LLMs.md)** - Fine-tuning BERT and similar models, training loops, and model evaluation
+- **[03_Fine_Tuning_LLMs.md](03_Fine_Tuning_LLMs.md)** - Fine-tuning BERT and similar models, training loops, and model evaluation
 
 ## Key Topics Covered
 

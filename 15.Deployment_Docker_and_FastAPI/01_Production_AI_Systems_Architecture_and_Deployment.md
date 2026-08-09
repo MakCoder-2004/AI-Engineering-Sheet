@@ -1189,13 +1189,13 @@ ESTIMATED COST: $5,000–15,000/month for 10K concurrent users
 
 | Topic | Document |
 |-------|----------|
-| Building basic pipelines | [01_Building_Pipelines.md](01_Building_Pipelines.md) |
-| Working with datasets | [02_Hugging_Face_Datasets.md](02_Hugging_Face_Datasets.md) |
-| Model search & preprocessing | [03_Searching_and_Preprocessing_for_Models.md](03_Searching_and_Preprocessing_for_Models.md) |
-| Computer vision models | [04_Computer_Vision.md](04_Computer_Vision.md) |
-| Speech & audio processing | [05_Speech_Recognition_and_Audio_Generation.md](05_Speech_Recognition_and_Audio_Generation.md) |
-| Multi-modal classification | [06_Multi_Modal_Models_for_Classification.md](06_Multi_Modal_Models_for_Classification.md) |
-| Multi-modal generation | [07_Multi_Modal_for_Generation.md](07_Multi_Modal_for_Generation.md) |
+| Building basic pipelines | [../06.Hugging_Face_Ecosystem/01_Building_Pipelines.md](../06.Hugging_Face_Ecosystem/01_Building_Pipelines.md) |
+| Working with datasets | [../06.Hugging_Face_Ecosystem/02_Working_with_Datasets.md](../06.Hugging_Face_Ecosystem/02_Working_with_Datasets.md) |
+| Model search & preprocessing | [../06.Hugging_Face_Ecosystem/03_Model_Search_and_Preprocessing.md](../06.Hugging_Face_Ecosystem/03_Model_Search_and_Preprocessing.md) |
+| Computer vision models | [../13.Multimodal_and_Voice_Agents/02_Image_Understanding_and_Fine_Tuning.md](../13.Multimodal_and_Voice_Agents/02_Image_Understanding_and_Fine_Tuning.md) |
+| Speech & audio processing | [../13.Multimodal_and_Voice_Agents/06_Speech_Recognition_and_Audio_Generation.md](../13.Multimodal_and_Voice_Agents/06_Speech_Recognition_and_Audio_Generation.md) |
+| Multi-modal classification | [../13.Multimodal_and_Voice_Agents/03_Multimodal_Classification.md](../13.Multimodal_and_Voice_Agents/03_Multimodal_Classification.md) |
+| Multi-modal generation | [../13.Multimodal_and_Voice_Agents/04_Multimodal_Generation.md](../13.Multimodal_and_Voice_Agents/04_Multimodal_Generation.md) |
 
 ---
 

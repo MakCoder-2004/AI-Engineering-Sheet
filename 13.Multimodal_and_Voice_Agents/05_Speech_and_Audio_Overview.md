@@ -4,7 +4,7 @@ Covers speech and audio processing with AI, including automatic speech recogniti
 
 ## Files in This Section
 
-- **[01_Speech_Recognition_and_Audio_Generation.md](01_Speech_Recognition_and_Audio_Generation.md)** - ASR, TTS, audio classification, Whisper, and music generation
+- **[06_Speech_Recognition_and_Audio_Generation.md](06_Speech_Recognition_and_Audio_Generation.md)** - ASR, TTS, audio classification, Whisper, and music generation
 
 ## Key Topics Covered
 

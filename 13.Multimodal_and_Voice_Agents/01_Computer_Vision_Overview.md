@@ -4,7 +4,7 @@ Introduces computer vision with deep learning, covering image classification, vi
 
 ## Files in This Section
 
-- **[01_Image_Understanding_and_Fine_Tuning.md](01_Image_Understanding_and_Fine_Tuning.md)** - Image classification, ViT models, and fine-tuning vision models on custom datasets
+- **[02_Image_Understanding_and_Fine_Tuning.md](02_Image_Understanding_and_Fine_Tuning.md)** - Image classification, ViT models, and fine-tuning vision models on custom datasets
 
 ## Key Topics Covered
 
