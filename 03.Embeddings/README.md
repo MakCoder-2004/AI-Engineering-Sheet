@@ -2,4 +2,6 @@
 
 Embedding models, vector representations, similarity search, and semantic retrieval fundamentals.
 
-Add notes for this phase here as you work through the roadmap.
+## Files in This Section
+
+- **[Embeddings.md](Embeddings.md)** - Comprehensive guide to embeddings, vector similarity, semantic search, RAG retrieval, evaluation, and production considerations
