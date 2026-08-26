@@ -1,36 +1,5 @@
 # RAG — Retrieval-Augmented Generation
 
-> Study notes from the **Production RAG Masterclass** (Paulo Dichone / freeCodeCamp) — build, debug, optimize, and scale RAG systems.
-> All code examples live in [`code/`](code/) — `code/production-course-main-code/` for the core pipeline and production patterns, `code/fcc-production-rag-part-6/` for advanced RAG.
-
-## Course Map
-
-| # | Section | Course Timestamp | Code |
-|---|---------|------------------|------|
-| 1 | The Problem RAG Solves | 0:00:00 | — |
-| 2 | Full RAG Overview — Two Pipelines | 0:01:44 | — |
-| 3 | Development Environment Setup | 0:08:27 | `pyproject.toml` |
-| 4 | Document Loaders | 0:15:35 | `document_loaders.py` |
-| 5 | Indexing Pipeline & Chunking | 0:28:27 | `text_splitters.py` |
-| 6 | Embedding Dimensions Deep Dive | 0:48:12 | `embeddings.py`, `embeddings_deep.py` |
-| 7 | Create a Vector DB with Chroma | 1:01:05 | `vector_stores.py` |
-| 8 | Similarity Search with Scores | 1:17:48 | `vector_stores.py` |
-| 9 | Building a Basic RAG System | 1:24:32 | `rag_pipeline.py` |
-| 10 | Debugging RAG Systems — 5 Failure Modes | 1:33:16 | — |
-| 11 | Hybrid Search | 1:53:46 | `advanced_rag.py` |
-| 12 | Token Budgeting | 2:13:49 | `cost_optimization.py` |
-| 13 | Observability & LangSmith | 2:21:10 | `langsmith_setup.py`, `monitoring.py` |
-| 14 | RAG Optimization | 2:37:56 | `advanced_rag.py` |
-| 15 | Scaling RAG & Real Costs of Vector Search | 3:12:58 | `cost_optimization.py` |
-| 16 | Production Hosting — Supabase & pgvector | 3:36:00 | — |
-| 17 | Three Pillars of Production Visibility | 4:04:41 | `monitoring.py` |
-| 18 | Production Project — Security Layer, FastAPI, LangGraph | 4:16:11 | `security_patterns.py` |
-| 19 | Advanced RAG (Long Context, Contextual Retrieval, Late Chunking, Agentic, GraphRAG, ColPali) | 6:06:09 | `fcc-production-rag-part-6/` |
-| 20 | Summary — RAG Evolution | 7:34:45 | — |
-| 21 | LlamaIndex — the RAG-First Framework | — | — |
-
----
-
 ## 1. The Problem RAG Solves
 
 LLMs have three hard limitations:
@@ -77,31 +46,6 @@ Key mental model: **the indexing pipeline decides what the retriever can find la
 
 ---
 
-## 3. Development Environment Setup
-
-The course stack (Python 3.10+, LangChain 1.x):
-
-```bash
-uv venv && uv pip install langchain langchain-openai langchain-chroma langgraph langsmith chromadb
-```
-
-`.env` file (never commit it):
-
-```text
-OPENAI_API_KEY=sk-...
-LANGSMITH_TRACING=true
-LANGSMITH_API_KEY=lsv2_...
-```
-
-```python
-from dotenv import load_dotenv
-load_dotenv()  # must run before any LangChain import uses env keys
-```
-
-> Code: `code/production-course-main-code/pyproject.toml`
-
----
-
 ## 4. Document Loaders
 
 Everything in LangChain retrieval flows through one object — the `Document`:
@@ -138,7 +82,7 @@ for doc in dir_loader.lazy_load():   # lazy_load yields one at a time
     print(doc.metadata["source"])
 ```
 
-> Code: `code/production-course-main-code/document_loaders.py`
+> Code: `code/production-rag/core-pipeline/document_loaders.py`
 >
 > **Rule:** garbage in, garbage out. A PDF parser that scrambles tables into broken text produces poor embeddings — no downstream trick fixes bad parsing.
 
@@ -197,7 +141,7 @@ code_splitter = RecursiveCharacterTextSplitter.from_language(
 )
 ```
 
-> Code: `code/production-course-main-code/text_splitters.py` — includes `chunk_size_comparison()` (200/500/1000 experiment) and `overlap_importance()`.
+> Code: `code/production-rag/core-pipeline/text_splitters.py` — includes `chunk_size_comparison()` (200/500/1000 experiment) and `overlap_importance()`.
 
 **Starting points:** FAQ answers 100–300 tokens · docs 300–700 · policies/manuals 500–1000 · tables keep logical units together.
 
@@ -253,7 +197,7 @@ cached = CacheBackedEmbeddings.from_bytes_store(
 # first call hits the API, identical text afterwards is served from cache
 ```
 
-> Code: `code/production-course-main-code/embeddings.py`, `embeddings_deep.py` (basic, batch, similarity ranking, caching)
+> Code: `code/production-rag/core-pipeline/embeddings.py`, `embeddings_deep.py` (basic, batch, similarity ranking, caching)
 
 ---
 
@@ -319,7 +263,7 @@ mmr_retriever = vectorstore.as_retriever(
 
 **MMR matters when top-k returns near-duplicates** — it penalizes redundancy so 3 slots return 3 *different* relevant docs.
 
-> Code: `code/production-course-main-code/vector_stores.py` — `similarity_search_with_scores()`, `metadata_filtering()`, `as_retriever()`, `persist_chroma()`
+> Code: `code/production-rag/core-pipeline/vector_stores.py` — `similarity_search_with_scores()`, `metadata_filtering()`, `as_retriever()`, `persist_chroma()`
 
 ---
 
@@ -390,7 +334,7 @@ class RAGResponse(BaseModel):
 structured_llm = llm.with_structured_output(RAGResponse)
 ```
 
-> Code: `code/production-course-main-code/rag_pipeline.py` — `demo_basic_rag()`, `demo_rag_with_sources()`, `demo_rag_with_fallback()`, `demo_structured_rag()`
+> Code: `code/production-rag/core-pipeline/rag_pipeline.py` — `demo_basic_rag()`, `demo_rag_with_sources()`, `demo_rag_with_fallback()`, `demo_structured_rag()`
 
 ---
 
@@ -455,7 +399,7 @@ docs = hybrid.invoke("ACID transactions")   # keyword-heavy query -> BM25 wins
 
 Rule of thumb from the course: **keyword-heavy queries → BM25 ranks first; paraphrased/semantic queries → vectors win; hybrid hedges both.** (Fusion uses Reciprocal Rank Fusion under the hood.)
 
-> Code: `code/production-course-main-code/advanced_rag.py` — `demo_ensemble_hybrid_search()` compares BM25 vs semantic vs ensemble on three query types.
+> Code: `code/production-rag/core-pipeline/advanced_rag.py` — `demo_ensemble_hybrid_search()` compares BM25 vs semantic vs ensemble on three query types.
 
 ---
 
@@ -484,7 +428,7 @@ class TokenBudget:
 
 `BudgetedLLM` wraps an LLM: rejects over-budget requests *before* calling the API, records usage after. In production, wire the same idea to `tiktoken` and per-user/per-day quotas.
 
-> Code: `code/production-course-main-code/cost_optimization.py` — `TokenBudget`, `BudgetedLLM`, `demo_token_budgeting()`
+> Code: `code/production-rag/core-pipeline/cost_optimization.py` — `TokenBudget`, `BudgetedLLM`, `demo_token_budgeting()`
 
 ---
 
@@ -524,7 +468,7 @@ What you get in the dashboard:
 | Dataset evaluation runs | Regression-test prompt or model changes |
 | Monitor mode | Error rates, feedback scores over time |
 
-> Code: `code/production-course-main-code/langsmith_setup.py` — `demo_basic_tracing()`, `demo_named_runs()`, `demo_trace_with_metadata()`
+> Code: `code/production-rag/core-pipeline/langsmith_setup.py` — `demo_basic_tracing()`, `demo_named_runs()`, `demo_trace_with_metadata()`
 
 ---
 
@@ -612,7 +556,7 @@ rag_chain = (
 )
 ```
 
-> Code: `code/production-course-main-code/advanced_rag.py` — all four demos plus `demo_advanced_rag_chain()`
+> Code: `code/production-rag/core-pipeline/advanced_rag.py` — all four demos plus `demo_advanced_rag_chain()`
 
 ---
 
@@ -659,7 +603,7 @@ class SemanticCache:
 | Reranking calls | if enabled | Rerank only top-k candidates |
 | Observability | trace volume | Sample traces in production |
 
-> Code: `code/production-course-main-code/cost_optimization.py` — `ModelRouter`, `SemanticCache`, `CachedLLM`
+> Code: `code/production-rag/core-pipeline/cost_optimization.py` — `ModelRouter`, `SemanticCache`, `CachedLLM`
 
 ---
 
@@ -713,7 +657,7 @@ class MetricsCollector:
 
 Alert thresholds worth having from day one: `p99 latency > 500ms`, `error rate > 1%`, `retrieval score below threshold`.
 
-> Code: `code/production-course-main-code/monitoring.py` — `JSONFormatter`, `MetricsCollector`, `InstrumentedLLM`
+> Code: `code/production-rag/core-pipeline/monitoring.py` — `JSONFormatter`, `MetricsCollector`, `InstrumentedLLM`
 
 ---
 
@@ -775,7 +719,7 @@ class SecurePipeline:                         # composes all five stages
 - [ ] Secrets in env vars / secret manager, never in code or traces
 - [ ] Security events logged and alerted
 
-> Code: `code/production-course-main-code/security_patterns.py` — all five classes with demos
+> Code: `code/production-rag/core-pipeline/security_patterns.py` — all five classes with demos
 
 ---
 
@@ -806,7 +750,7 @@ full_doc = relevant_docs[0].page_content          # whole policy, not a chunk
 response = chain.invoke({"document": full_doc, "query": query})
 ```
 
-> Code: `code/fcc-production-rag-part-6/01_long_context_vs_rag.py` — cost/latency math + `demo_hybrid_approach()`
+> Code: `code/production-rag/advanced-rag/01_long_context_vs_rag.py` — cost/latency math + `demo_hybrid_approach()`
 
 ### 19.2 Contextual Retrieval
 
@@ -834,7 +778,7 @@ flowchart LR
 
 **Production notes:** one-time indexing cost (~$0.01–0.05/document, +1–2s per chunk — batch it offline); chunks ~20–30% bigger; no query-time impact. Use it when chunks reference entities by pronoun or documents come from many sources.
 
-> Code: `code/fcc-production-rag-part-6/02_contextual_retrieval.py` — problem demo, `add_contextual_prefix()`, `compare_retrieval()` (scores side-by-side), `create_contextual_chunks()`
+> Code: `code/production-rag/advanced-rag/02_contextual_retrieval.py` — problem demo, `add_contextual_prefix()`, `compare_retrieval()` (scores side-by-side), `create_contextual_chunks()`
 
 ### 19.3 Late Chunking vs Early Chunking
 
@@ -864,7 +808,7 @@ flowchart TB
 
 Combined approaches: +25–30% over naive chunking.
 
-> Code: `code/fcc-production-rag-part-6/03_late_chunking.py` — pronoun-orphan demo, similarity comparison, all four options
+> Code: `code/production-rag/advanced-rag/03_late_chunking.py` — pronoun-orphan demo, similarity comparison, all four options
 
 ### 19.4 Agentic RAG — Self-Correcting Retrieval
 
@@ -916,7 +860,7 @@ app = workflow.compile()
 
 **Use when:** queries may need reformulation, answer quality is high-stakes, document types are diverse. **Cost:** each retry = extra LLM grading + rewrite calls — cap `max_retries` at 2.
 
-> Code: `code/fcc-production-rag-part-6/04_agentic_rag.py` — full working graph
+> Code: `code/production-rag/advanced-rag/04_agentic_rag.py` — full working graph
 
 ### 19.5 GraphRAG — Multi-hop Reasoning
 
@@ -952,7 +896,7 @@ G.add_edge("Sarah Johnson", "Executive Department", relation="WORKS_IN")
 
 **Use when** documents describe relationships (org charts, research citations) and multi-hop questions are expected. **Skip for** simple fact retrieval, small corpora, or tight budgets.
 
-> Code: `code/fcc-production-rag-part-6/05_graphrag_intro.py` — graph build, traversal, LLM entity extraction
+> Code: `code/production-rag/advanced-rag/05_graphrag_intro.py` — graph build, traversal, LLM entity extraction
 
 ### 19.6 Multimodal RAG — ColPali (Vision-Based Document RAG)
 
@@ -986,7 +930,7 @@ flowchart LR
 | Tables/charts/diagrams | Destroyed | Fully preserved |
 | Best for | Plain text docs | Financial reports, technical diagrams, scientific papers |
 
-> Code: `code/fcc-production-rag-part-6/06_multimodal_rag.py` — extraction-failure demo + full ColPali pipeline implementation
+> Code: `code/production-rag/advanced-rag/06_multimodal_rag.py` — extraction-failure demo + full ColPali pipeline implementation
 
 ---
 
@@ -1048,7 +992,7 @@ Concepts transfer 1:1 (loaders → `Reader`s, splitters → `NodeParser`s, retri
 
 ## 23. Source Trail
 
-- Course repos: [`code/production-course-main-code/`](code/production-course-main-code/) · [`code/fcc-production-rag-part-6/`](code/fcc-production-rag-part-6/)
+- Course repos: [`code/production-rag/core-pipeline/`](code/production-rag/core-pipeline/) · [`code/production-rag/advanced-rag/`](code/production-rag/advanced-rag/)
 - Original RAG paper: <https://arxiv.org/abs/2005.11401>
 - Anthropic contextual retrieval: <https://www.anthropic.com/engineering/contextual-retrieval>
 - Jina late chunking: <https://jina.ai/news/late-chunking-in-long-context-embedding-models/>
