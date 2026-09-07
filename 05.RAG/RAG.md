@@ -748,11 +748,11 @@ requires a full re-index.
 
 ### 9.2 Cosine similarity
 
-For vectors $q$ and $d$:
+For vectors `q` and `d`:
 
-$$
-\operatorname{cos}(q,d)=\frac{q\cdot d}{\lVert q\rVert_2\lVert d\rVert_2}
-$$
+```text
+cos(q, d) = (q . d) / (||q|| * ||d||)
+```
 
 For unit-normalized vectors, maximizing dot product and cosine similarity gives
 the same ranking. Euclidean distance may also produce an equivalent ordering
@@ -810,19 +810,19 @@ version. A text hash alone can incorrectly reuse vectors after model changes.
 
 ### 9.6 Storage math
 
-For $N$ dense vectors, dimension $D$, and $B$ bytes per component:
+For `N` dense vectors, dimension `D`, and `B` bytes per component:
 
-$$
-\text{raw vector bytes}=N\times D\times B
-$$
+```text
+raw vector bytes = N * D * B
+```
 
 Float32 uses 4 bytes; float16 uses 2; int8 uses 1 before scale/codebook overhead.
 
 Example with one million 1,536-dimensional float32 vectors:
 
-$$
-1{,}000{,}000\times1{,}536\times4=6{,}144{,}000{,}000\text{ bytes}
-$$
+```text
+1,000,000 * 1,536 * 4 = 6,144,000,000 bytes
+```
 
 That is about 6.144 GB decimal or 5.72 GiB binary for raw vectors alone.
 Production capacity must also include:
@@ -833,7 +833,7 @@ Production capacity must also include:
 - Replicas, snapshots, write-ahead logs, and temporary build space.
 - Multi-vector models, which store many vectors per item.
 
-If each source item produces $m$ vectors, replace $N$ with $N\times m$.
+If each source item produces `m` vectors, replace `N` with `N * m`.
 
 ---
 
@@ -1024,9 +1024,9 @@ leak side channels; prefer native pre-filtering or isolated indexes.
 Hybrid retrieval combines lexical and semantic candidate lists. Reciprocal Rank
 Fusion (RRF) avoids comparing incompatible raw score scales:
 
-$$
-\operatorname{RRF}(d)=\sum_{r\in R}\frac{w_r}{k_0+\operatorname{rank}_r(d)}
-$$
+```text
+RRF(d) = sum over retrievers r of ( w_r / (k_0 + rank_r(d)) )
+```
 
 ```mermaid
 flowchart LR
@@ -1062,11 +1062,15 @@ Do not build a cross-tenant lexical index and rely on prompt instructions.
 
 MMR balances query relevance and novelty. One common objective is:
 
-$$
-\arg\max_{d\in R\setminus S}
-\left[\lambda\operatorname{sim}(d,q)
--(1-\lambda)\max_{s\in S}\operatorname{sim}(d,s)\right]
-$$
+```text
+Select the d in R minus S that maximizes:
+
+    lambda * sim(d, q) - (1 - lambda) * max sim(d, s) over s in S
+
+where q is the query, R is the candidate set, S is the already-selected
+set, sim is a similarity score, and lambda (0 to 1) trades relevance
+against novelty.
+```
 
 ```mermaid
 flowchart LR
@@ -1620,29 +1624,21 @@ price in architectural reasoning without an "as of" date.
 
 Let:
 
-- $T_d$: document tokens read by the embedding model.
-- $P_e$: embedding price per million tokens.
-- $N_c$: number of chunks.
-- $T_{ctx,in}$ and $T_{ctx,out}$: contextualization input/output tokens.
-- $P_{ctx,in}$ and $P_{ctx,out}$: contextualizer prices per million tokens.
-- $C_{parse}$: parser/OCR cost.
-- $C_{compute}$: local accelerator and worker cost.
-- $C_{write}$: database write and index-build cost.
+- `T_d`: document tokens read by the embedding model.
+- `P_e`: embedding price per million tokens.
+- `N_c`: number of chunks.
+- `T_ctx_in` and `T_ctx_out`: contextualization input/output tokens.
+- `P_ctx_in` and `P_ctx_out`: contextualizer prices per million tokens.
+- `C_parse`: parser/OCR cost.
+- `C_compute`: local accelerator and worker cost.
+- `C_write`: database write and index-build cost.
 
-$$
-C_{embed}=\frac{T_d}{10^6}P_e
-$$
-
-$$
-C_{context}=N_c\left(
-\frac{T_{ctx,in}}{10^6}P_{ctx,in}+
-\frac{T_{ctx,out}}{10^6}P_{ctx,out}
-\right)
-$$
-
-$$
-C_{ingest}=C_{parse}+C_{embed}+C_{context}+C_{compute}+C_{write}
-$$
+```text
+C_embed   = (T_d / 1,000,000) * P_e
+C_context = N_c * ((T_ctx_in / 1,000,000) * P_ctx_in
+                 + (T_ctx_out / 1,000,000) * P_ctx_out)
+C_ingest  = C_parse + C_embed + C_context + C_compute + C_write
+```
 
 If the provider supports cached document prefixes, model cached and uncached
 input separately using the provider's current rules.
@@ -1651,36 +1647,35 @@ input separately using the provider's current rules.
 
 Let:
 
-- $T_q$: query-embedding tokens and $P_{qe}$ its price per million.
-- $C_s$: vector/lexical search cost allocation.
-- $U_r$: provider-defined billable rerank units and $P_r$ price per unit.
-- $T_{in}$ and $T_{out}$: generator input and output tokens.
-- $P_{in}$ and $P_{out}$: generator prices per million tokens.
-- $C_v$: validation/moderation/judge cost.
-- $C_o$: observability allocation.
-- $p_h$: cache-hit probability and $C_h$: hit-serving cost.
+- `T_q`: query-embedding tokens and `P_qe` its price per million.
+- `C_s`: vector/lexical search cost allocation.
+- `U_r`: provider-defined billable rerank units and `P_r` price per unit.
+- `T_in` and `T_out`: generator input and output tokens.
+- `P_in` and `P_out`: generator prices per million tokens.
+- `C_v`: validation/moderation/judge cost.
+- `C_o`: observability allocation.
+- `p_h`: cache-hit probability and `C_h`: hit-serving cost.
 
-$$
-C_{miss}=\frac{T_q}{10^6}P_{qe}+C_s+U_rP_r+
-\frac{T_{in}}{10^6}P_{in}+\frac{T_{out}}{10^6}P_{out}+C_v+C_o
-$$
+```text
+C_miss = (T_q / 1,000,000) * P_qe + C_s + U_r * P_r
+       + (T_in / 1,000,000) * P_in + (T_out / 1,000,000) * P_out
+       + C_v + C_o
 
-$$
-E[C_{request}]=p_hC_h+(1-p_h)C_{miss}
-$$
+E[C_request] = p_h * C_h + (1 - p_h) * C_miss
+```
 
-Monthly variable cost for $Q$ requests is approximately
-$Q\times E[C_{request}]$, plus fixed storage, compute, database, networking,
+Monthly variable cost for `Q` requests is approximately
+`Q * E[C_request]`, plus fixed storage, compute, database, networking,
 backup, and observability costs.
 
 ### 16.3 Storage capacity
 
-$$
-C_{vectors}=N\times D\times B\times R\times O
-$$
+```text
+C_vectors = N * D * B * R * O
+```
 
-where $R$ is replica count and $O$ is an empirically measured overhead factor.
-Use observed database size rather than guessing $O$ for final capacity planning.
+where `R` is replica count and `O` is an empirically measured overhead factor.
+Use observed database size rather than guessing `O` for final capacity planning.
 
 ### 16.4 Small calculator
 
@@ -2180,9 +2175,9 @@ score rather than mean-pooling each page to one vector.
 
 One simplified formulation is:
 
-$$
-s(Q,D)=\sum_{i=1}^{|Q|}\max_{j\in[1,|D|]} q_i^T d_j
-$$
+```text
+s(Q, D) = sum over query vectors i of (max over page vectors j of dot(q_i, d_j))
+```
 
 Each query vector finds its best matching page vector, and matches are summed.
 
@@ -2395,30 +2390,24 @@ unanswerable questions, current-versus-expired policy, and adversarial evidence.
 
 ### 22.2 Retrieval metrics
 
-For relevant set $Rel_q$ and ordered retrieved list $Ret_q@k$:
+For relevant set `Rel_q` and ordered retrieved list `Ret_q@k`:
 
-$$
-\operatorname{Precision@k}=\frac{|Rel_q\cap Ret_q@k|}{k}
-$$
+```text
+Precision@k = |Rel_q intersect Ret_q@k| / k
+Recall@k    = |Rel_q intersect Ret_q@k| / |Rel_q|
+HitRate@k   = 1 if any relevant item is in the top-k, else 0
+```
 
-$$
-\operatorname{Recall@k}=\frac{|Rel_q\cap Ret_q@k|}{|Rel_q|}
-$$
-
-$$
-\operatorname{HitRate@k}=\mathbb{1}[|Rel_q\cap Ret_q@k|>0]
-$$
-
-Reciprocal rank for the first relevant result at rank $r_q$ is $1/r_q$; Mean
+Reciprocal rank for the first relevant result at rank `r_q` is `1 / r_q`; Mean
 Reciprocal Rank averages it over queries.
 
 Average Precision rewards ranking all relevant items early. nDCG supports graded
 relevance:
 
-$$
-\operatorname{DCG@k}=\sum_{i=1}^{k}\frac{2^{rel_i}-1}{\log_2(i+1)},\qquad
-\operatorname{nDCG@k}=\frac{DCG@k}{IDCG@k}
-$$
+```text
+DCG@k  = sum over i=1..k of ((2^rel_i - 1) / log2(i + 1))
+nDCG@k = DCG@k / IDCG@k
+```
 
 Also measure:
 
@@ -3321,7 +3310,7 @@ summaries, usually with source provenance.
 : Generated content that is unsupported, false, or fabricated in context.
 
 **Hit Rate@k**
-: Fraction of queries with at least one relevant result in the top $k$.
+: Fraction of queries with at least one relevant result in the top `k`.
 
 **Hybrid search**
 : Retrieval combining lexical and semantic result sets.
@@ -3369,7 +3358,7 @@ then aggregating those maxima.
 : Searching small child chunks and returning their larger parent spans.
 
 **Precision@k**
-: Proportion of the first $k$ retrieved items that are relevant.
+: Proportion of the first `k` retrieved items that are relevant.
 
 **Prompt injection**
 : Input that attempts to override intended model instructions or tool policy.
@@ -3381,7 +3370,7 @@ then aggregating those maxima.
 : Combining ranked lists, often without comparing incompatible raw scores.
 
 **Recall@k**
-: Proportion of all relevant items retrieved in the first $k$ results.
+: Proportion of all relevant items retrieved in the first `k` results.
 
 **Reranker**
 : A model or algorithm that reorders a bounded candidate set for precision.
