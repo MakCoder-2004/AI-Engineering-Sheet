@@ -1,7 +1,7 @@
 # Vector Databases
 
 > What they are, why they exist, and a full deep dive into the two databases used in the Production RAG course: **Chroma** (development) and **pgvector on PostgreSQL** (production).
-> Companion notes: [`05.RAG/RAG.md`](../05.RAG/RAG.md) · Course code: [`05.RAG/code/`](../05.RAG/code/)
+> Companion handbook: [`05.RAG/RAG.md`](../05.RAG/RAG.md)
 
 ## Table of Contents
 
@@ -390,7 +390,6 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
 ## 8. Source Trail
 
-- Course code: [`05.RAG/code/production-course-main-code/vector_stores.py`](../05.RAG/code/production-course-main-code/vector_stores.py)
 - Chroma docs: <https://docs.trychroma.com/>
 - pgvector GitHub: <https://github.com/pgvector/pgvector>
 - Supabase pgvector guide: <https://supabase.com/docs/guides/database/extensions/pgvector>
