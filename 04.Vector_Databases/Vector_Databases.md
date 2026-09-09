@@ -169,6 +169,9 @@ vectorstore = Chroma.from_documents(
 
 > Code: `code/production-course-main-code/vector_stores.py` — `chroma_basics()`
 
+> Course map (LangChain lessons 45-46): `WebBaseLoader` → `RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=120)` → `OpenAIEmbeddings(model="text-embedding-3-small")` → `Chroma.from_documents` → `as_retriever(k=4)`. The course mentions Pinecone — use Chroma here (same LangChain interface, local persist, no key). Full ingest + naive vs 2-step flow: `05.RAG/RAG.md` §25.5; agent wiring: `07.LangChain_Ecosystem/LangChain/LangChain.md` §6.
+> `init_embeddings("openai:text-embedding-3-small")` (LangChain handbook §6) is the provider-agnostic alias for `OpenAIEmbeddings(model=...)` above — same vectors, first form switches provider with one string.
+
 ### 4.3 Similarity search with scores
 
 ```python

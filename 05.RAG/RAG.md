@@ -2880,6 +2880,101 @@ fingerprint for reproducibility.
 - Load: stage saturation, tail latency, cancellation, and backpressure.
 - Recovery: index rollback, restore, deletion, and provider outage.
 
+### 25.5 Appendix: Medium Analyzer via LangChain + Chroma (course L44-49 map)
+
+> Course project (Section 9, lessons 44-50) mapped onto this handbook's
+> components. LangChain is only the wiring — concepts live above.
+> Companion: `07.LangChain_Ecosystem/LangChain/LangChain.md` §6-§7 (thin),
+> vector internals in `04.Vector_Databases/Vector_Databases.md` §4.
+
+Boilerplate (L44):
+
+```bash
+pip install -U langchain langchain-community langchain-text-splitters langchain-chroma langchain-openai python-dotenv
+```
+
+```text
+medium_analyzer/{ingest.py, query.py, config.py, .env}
+# .env: OPENAI_API_KEY=sk-... (Chroma persists locally, no key needed)
+```
+
+Class review (L45) → handbook map:
+
+| Course class | Handbook section |
+| --- | --- |
+| Loaders (`WebBaseLoader`) | §5 Documents and Loading |
+| `RecursiveCharacterTextSplitter` | §7 Chunking Foundations |
+| `OpenAIEmbeddings(model="text-embedding-3-small")` | §9 Embeddings |
+| `Chroma` (`langchain-chroma`) | §10 Indexing + Vector DB handbook §4 |
+
+Ingestion (L46) — `load → split → embed → upsert` with metadata:
+
+```python
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
+
+def ingest_medium_articles(urls: list[str], persist_dir: str = "./chroma_db"):
+    docs = []
+    for u in urls:
+        for d in WebBaseLoader(u).load():
+            d.metadata.update({"source": u})  # keep citation/filter key
+            docs.append(d)
+    chunks = RecursiveCharacterTextSplitter(
+        chunk_size=800, chunk_overlap=120,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    ).split_documents(docs)
+    emb = OpenAIEmbeddings(model="text-embedding-3-small")
+    store = Chroma.from_documents(chunks, emb, persist_directory=persist_dir)
+    print(f"{len(docs)} docs -> {len(chunks)} chunks -> {persist_dir}")
+    return store.as_retriever(search_kwargs={"k": 4})
+```
+
+Naive retrieval debug (L48) — inspect before generating:
+
+```python
+def naive_retrieve(retriever, q: str):
+    hits = retriever.invoke(q)  # tune k, search_type="mmr", score_threshold
+    for i, d in enumerate(hits):
+        print(f"[{i+1}] {d.page_content[:300]} | {d.metadata}")
+    return hits
+```
+
+2-step RAG with citations + refusal (L49):
+
+```python
+from langchain.chat_models import init_chat_model
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+model = init_chat_model("openai:gpt-5.5", temperature=0)
+rag_prompt = ChatPromptTemplate.from_messages([
+    ("system", "Answer ONLY from context. Cite [1][2]. If missing, say you don't know.\n{context}"),
+    ("human", "{question}"),
+])
+
+def fmt_docs(docs):
+    return "\n\n".join(f"[{i+1}] {d.page_content}\n(src={d.metadata.get('source')})"
+                       for i, d in enumerate(docs))
+
+rag_chain = (
+    {"context": retriever | fmt_docs, "question": RunnablePassthrough()}
+    | rag_prompt | model | StrOutputParser()
+)
+```
+
+|  | Naive (L48) | 2-step (L49) |
+| --- | --- | --- |
+| Output | Raw chunks, no synthesis | Grounded answer + `[1][2]` citations |
+| Failure | Silent dilution | Explicit refusal when evidence missing |
+| Debug | `naive_retrieve` print | Compare trace: query → chunks → prompt → answer |
+
+RAG docs map (L50): Loaders §5, Chunking §7-§8, Embeddings §9, Indexing §10,
+Retrieval §11, Basic RAG §12, Query transform §13, Rerank §14, Eval §22,
+Observability §23. LangChain API detail: <https://docs.langchain.com/oss/python/langchain/>.
+
 ---
 
 ## 26. Advanced Topics and Evolution
