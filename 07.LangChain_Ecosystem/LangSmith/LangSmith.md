@@ -1,416 +1,476 @@
----
-section: 07.LangChain_Ecosystem
-lesson: 02
-title: LangSmith Handbook
-date: 2026-09-09
-source_resources:
-  - https://docs.langchain.com/langsmith/observability-concepts
-  - https://docs.langchain.com/langsmith/evaluation-concepts
-  - https://docs.langchain.com/langsmith/trace-with-langchain
-  - https://docs.langchain.com/oss/python/langchain/overview
----
+# LangSmith Python Handbook
 
-# LangSmith Handbook (Python, Latest)
+LangSmith is the observability, evaluation, prompt-management, and deployment
+platform for LLM applications. It complements LangChain, LangGraph, Deep Agents,
+and non-LangChain applications. The [observability concepts](https://docs.langchain.com/langsmith/observability-concepts),
+[evaluation concepts](https://docs.langchain.com/langsmith/evaluation-concepts),
+and [Python SDK reference](https://reference.langchain.com/python/langsmith/) are
+the authoritative sources for current behavior.
 
-## Learning objectives
+## 1. What LangSmith solves
 
-- Explain observability (logs/metrics/traces) and why LLM apps need tracing.
-- Describe LangSmith data model: runs, traces, threads, trajectories, projects.
-- Instrument any code with auto-tracing, `@traceable`, and metadata/tags.
-- Build datasets, run offline experiments, and score with code + LLM-as-judge evaluators.
-- Wire online monitoring so production failures become regression tests.
+LLM failures are often plausible rather than exceptional: a wrong tool argument,
+weak retrieval, prompt injection, hallucinated citation, or slow retry can all
+produce a successful HTTP response. LangSmith records the intermediate work so
+you can debug, evaluate, and monitor it.
 
-## 1. Observability globally (before LangSmith)
+| Capability | Use |
+| --- | --- |
+| Tracing | inspect model, tool, retriever, parser, and graph steps |
+| Projects | separate development, staging, and production traffic |
+| Datasets | store regression examples and references |
+| Evaluations | score quality with code, judges, pairwise, or humans |
+| Prompts | version and reuse prompts |
+| Feedback | capture user and evaluator judgments |
+| Studio | inspect and interact with graph applications |
+| Deployment | run managed or self-hosted agent services |
 
-Traditional backends fail loudly (500, stack trace). LLM apps fail **silently**:
-fluent but wrong answer, missing citation, wrong tool args, slow but successful.
-You cannot reproduce from the final text alone — you need the intermediate steps.
-
-### 1.1 Three pillars
-
-| Signal | What | Example | LLM gap |
-| --- | --- | --- | --- |
-| Logs | Discrete events | `retriever returned 0 hits` | Drowns in prompt text |
-| Metrics | Aggregates over time | p95 latency, error rate, tokens/$ | No why per request |
-| Traces | Tree of spans for one operation | query -> rewrite -> retrieve -> rerank -> prompt -> model -> parse | **Exactly what LLM apps need** |
-
-LangSmith = traces-first observability + evals + prompt hub, where a LangSmith
-**run** ≈ an OpenTelemetry **span**.
-
-```mermaid
-flowchart TB
-    T[Trace: user request] --> R1[Run: query rewrite]
-    T --> R2[Run: retriever k=4]
-    R2 --> R2a[Run: embeddings]
-    R2 --> R2b[Run: vector search]
-    T --> R3[Run: prompt render]
-    T --> R4[Run: chat model gpt-5.5]
-    T --> R5[Run: parser / structured output]
-    R4 --> M[latency, tokens, cost, tool_calls]
-```
-
-### 1.2 What to observe per request
-
-- inputs/outputs per step (prompt text, retrieved chunks + scores, tool args/result),
-- model id + params, token usage + cost, latency per run,
-- user/session ids (after redaction), app version, env,
-- feedback (thumbs up/down, human label, evaluator score).
-
-Golden rule: **without a trace you only see the bad answer; with a trace you see
-which step caused it.**
-
----
-
-## 2. What LangSmith is (and is not)
-
-LangSmith is the **trace + eval + monitor** layer for LangChain, LangGraph,
-and any Python/JS app (OpenAI, Anthropic SDKs auto-instrumented).
-
-Use it for: debugging one bad run, regression-testing prompt/model changes,
-monitoring production quality/cost, versioning prompts, collecting human labels.
-
-It is not: a vector DB, a model provider, or a replacement for unit tests.
-
-### 2.1 Data model
-
-| Concept | Shape | Reach for it when |
-| --- | --- | --- |
-| **Run** | One unit of work (model call, tool, retriever, parser) | Inspect a single step's I/O |
-| **Trace** | Tree of runs for one operation (max 25k runs) | Debug why one request failed/slow |
-| **Thread** | Sequence of traces for a multi-turn session (`thread_id`) | Follow conversation across turns |
-| **Trajectory** | Flat ordered message list projected from a thread | Read what was said without nesting |
-| **Project** | Container for an app/service's traces | Separate dev/staging/prod |
-| **Feedback** | Score/tag on a run (`key`, `score|value`, `comment`) | Human or evaluator judgment |
-| **Dataset / Example** | Curated test cases (`inputs`, `reference_outputs`, `metadata`) | Offline evals |
-| **Experiment** | One app version run over a dataset | Compare prompts/models |
+LangSmith is not a model provider, vector database, or replacement for unit
+tests. See the [platform overview](https://docs.langchain.com/langsmith/overview).
 
 ```mermaid
 flowchart LR
-    P[Project: support-bot-prod] --> T1[Trace: turn 1]
-    P --> T2[Trace: turn 2]
-    T1 --> H[Thread thread_id=abc]
-    T2 --> H
-    H --> TJ[Trajectory: flat messages]
-    D[Dataset: 50 gold Q&A] --> E[Experiment: prompt-v3 vs v4]
+    App[LangChain / LangGraph / Deep Agent] --> T[Tracing]
+    T --> P[Projects and traces]
+    P --> D[Datasets]
+    D --> E[Experiments and evaluators]
+    E --> F[Feedback and fixes]
+    F --> App
+    P --> M[Dashboards and alerts]
+    P --> S[Studio and debugging]
 ```
 
-Retention: SaaS traces kept ~180 days; **datasets persist indefinitely** — promote
-important traces to datasets before they expire.
+## 2. Setup and environment
 
----
-
-## 3. Setup (real usage)
+Install the SDK and the evaluation helpers used by your project:
 
 ```bash
-pip install -U langsmith langchain openai
+python -m pip install -U langsmith openevals
 ```
+
+Tracing configuration uses environment variables. Do not place real values in
+source or documentation:
+
+```text
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=YOUR_LANGSMITH_API_KEY
+LANGSMITH_PROJECT=YOUR_PROJECT_NAME
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+See [environment variables](https://docs.langchain.com/langsmith/env-var) and
+[create an API key](https://docs.langchain.com/langsmith/create-account-api-key).
+Use separate projects and keys for development, staging, and production.
+
+## 3. Data model
+
+| Object | Meaning |
+| --- | --- |
+| Run | One unit of work, such as a model call or tool execution |
+| Trace | A tree of runs for one user request |
+| Thread | Related multi-turn traces, usually connected by a thread ID |
+| Project | A named container for traces |
+| Dataset | Curated input/output examples |
+| Example | One dataset test case |
+| Experiment | One target evaluated across a dataset |
+| Feedback | Score, value, or comment attached to a run |
+| Prompt commit | A versioned prompt in the prompt workspace |
+| Annotation queue | Human review workflow |
+
+Use tags for filtering and metadata for dimensions such as application version,
+tenant, environment, and feature flag. Never use metadata as a substitute for
+access control.
+
+## 4. Automatic tracing
+
+LangChain and LangGraph integrations emit child runs when tracing is enabled:
 
 ```python
 import os
-os.environ["LANGSMITH_TRACING"] = "true"   # auto-trace LangChain/LangGraph/OpenAI
-os.environ["LANGSMITH_API_KEY"] = "lsv2_..."  # from smith.langchain.com
-os.environ["LANGSMITH_PROJECT"] = "support-bot-dev"
-# Optional: os.environ["LANGSMITH_ENDPOINT"] = "https://api.smith.langchain.com"
-# Optional: os.environ["OPENAI_API_KEY"] = "sk-..."
-```
 
-Verify: run any LangChain chain once, then check the project in LangSmith UI —
-you should see 1 trace with N runs (prompt, model, parser, retriever).
+os.environ["LANGSMITH_TRACING"] = "true"
+os.environ["LANGSMITH_API_KEY"] = "YOUR_LANGSMITH_API_KEY"
+os.environ["LANGSMITH_PROJECT"] = "YOUR_PROJECT_NAME"
 
-```python
 from langchain.chat_models import init_chat_model
-model = init_chat_model("openai:gpt-5.5")
-print(model.invoke("Say hi in one sentence.").text)  # appears in LangSmith
+
+model = init_chat_model("PROVIDER:MODEL_NAME")
+print(model.invoke("Say hello in one sentence.").text)
 ```
 
----
+The [LangChain tracing guide](https://docs.langchain.com/langsmith/trace-with-langchain)
+and [LangGraph tracing guide](https://docs.langchain.com/langsmith/trace-with-langgraph)
+cover integration-specific configuration. OpenAI, Anthropic, and other supported
+SDKs can also be traced directly; see the [integration list](https://docs.langchain.com/langsmith/integrations).
 
-## 4. Tracing: auto, `@traceable`, manual
+```mermaid
+flowchart TB
+    R[One user request] --> Q[Root trace]
+    Q --> P[Prompt render run]
+    Q --> M[Model run]
+    M --> TC{Tool call?}
+    TC -->|Yes| T[Tool run]
+    T --> M
+    Q --> RET[Retriever run]
+    Q --> PARSE[Parser / structured output]
+    Q --> OUT[Final output]
+```
 
-### 4.1 Auto-tracing (zero code)
+## 5. Trace arbitrary Python code
 
-LangChain, LangGraph, and supported integrations emit runs automatically when
-`LANGSMITH_TRACING=true`. No decorator needed for `chain.invoke()` or `agent.invoke()`.
-
-### 4.2 `@traceable` — trace any function (most important API)
+`@traceable` is the most useful SDK decorator for application functions:
 
 ```python
 from langsmith import traceable
 
-@traceable(name="rewrite_query", tags=["rag", "rewrite"], metadata={"version": "v3"})
+@traceable(
+    name="rewrite_query",
+    tags=["retrieval"],
+    metadata={"component_version": "1"},
+)
 def rewrite_query(question: str) -> str:
-    # any logic: LLM call, regex, heuristics — all captured as a run
-    return question.strip().replace("plz", "please")
+    return question.strip()
 
-@traceable(name="rag_answer")
-def answer(question: str) -> str:
-    q = rewrite_query(question)          # nested run under same trace
-    docs = retrieve(q)                   # if retrieve is @traceable, also nested
-    return generate(q, docs)
+@traceable(name="answer_request")
+def answer_request(question: str) -> str:
+    return f"Answer for: {rewrite_query(question)}"
 
-print(answer("plz refund window?"))  # 1 trace: answer -> rewrite_query -> retrieve -> generate
+print(answer_request("  What is RAG?  "))
 ```
 
-Rules:
+Decorator options include `name`, `run_type`, `tags`, `metadata`, `client`,
+`process_inputs`, `process_outputs`, and `reduce_fn` for streaming. Async
+functions are supported. Use `process_inputs` and `process_outputs` to redact
+personal or secret data before it reaches the service. See [annotate code](https://docs.langchain.com/langsmith/annotate-code).
 
-- Sync + async both supported (`@traceable` detects).
-- Args become run inputs, return value becomes run output (must be JSON-serializable-ish).
-- `name`, `tags`, `metadata` make filtering possible later.
-- Set `client=` explicitly in notebooks/tests if env differs.
+```mermaid
+flowchart LR
+    I[Function inputs] --> R[process_inputs]
+    R --> T[@traceable run]
+    T --> C[Child traced calls]
+    C --> O[Function output]
+    O --> S[process_outputs]
+    S --> L[LangSmith trace]
+```
 
-Hiding PII:
+For lower-level control, use the [`trace` context manager](https://docs.langchain.com/langsmith/nest-traces)
+or `RunTree`. Prefer decorators and framework callbacks unless you need custom
+parent/child relationships.
+
+## 6. Tags, metadata, feedback, and privacy
+
+LangChain run configuration propagates trace context:
 
 ```python
-from langsmith import traceable
-
-@traceable(process_inputs=lambda d: {"question": "[REDACTED]"})
-def answer_private(question: str) -> str:
-    return f"Answer for len={len(question)}"
+result = chain.invoke(
+    {"question": "What is retrieval?"},
+    config={
+        "tags": ["staging", "rag"],
+        "metadata": {
+            "app_version": "2026.1",
+            "thread_id": "THREAD_ID",
+        },
+    },
+)
 ```
 
-### 4.3 Manual enrichment: tags, metadata, thread
-
-```python
-from langsmith import traceable
-
-@traceable(tags=["prod", "rag"], metadata={"app_version": "1.4.0", "env": "prod"})
-def rag_answer(question: str, user_id: str) -> str:
-    return "..."
-
-# group multi-turn traces:
-rag_answer.invoke if False else None
-# pass via langchain config instead:
-# chain.invoke({"question": "..."}, config={"tags": ["demo"], "metadata": {"thread_id": "abc", "user_id": "u42"}})
-```
-
-In LangChain, prefer `config={"tags":..., "metadata": {"thread_id": ...}}` so all
-child runs inherit them. `thread_id` links traces into a thread.
-
-### 4.4 `trace` context manager + `RunTree` (escape hatches)
-
-```python
-from langsmith import trace
-
-with trace(name="nightly_ingest", tags=["cron"], metadata={"shard": 7}) as rt:
-    rt.add_metadata({"docs": 120})
-    ...  # everything @traceable inside joins this trace
-```
-
-`RunTree` = low-level explicit construction; use only when decorator/context
-cannot express parent/child (rare).
-
-### 4.5 Debugging checklist with traces
-
-RAG failure — inspect in order:
-
-1. user question, 2. rewritten query, 3. filters, 4. retrieved chunks + scores,
-5. reranker output, 6. final context, 7. rendered prompt, 8. answer + citations.
-
-Agent failure — inspect:
-
-1. system prompt, 2. tool list, 3. model tool decision, 4. tool args,
-5. tool result, 6. next decision, 7. stop condition, 8. retry path.
-
-In UI use filter `tags:prod AND latency>5s`, group by `metadata.app_version`,
-compare a good vs bad trace side-by-side.
-
----
-
-## 5. Datasets: turn traces into regression tests
-
-Dataset = list of examples. Example = `{inputs, reference_outputs?, metadata?}`.
-
-```json
-{
-  "inputs": {"question": "What is the expense submission deadline?"},
-  "reference_outputs": {"answer": "30 days after transaction date."},
-  "metadata": {"category": "policy", "expected_source": "travel_policy_2026"}
-}
-```
-
-### 5.1 Create from SDK (real usage)
+Capture explicit user feedback with the SDK client:
 
 ```python
 from langsmith import Client
 
 client = Client()
-ds = client.create_dataset("support-gold-v1", description="20 curated support Q&A")
-
-client.create_examples(
-    dataset_id=ds.id,
-    examples=[
-        {"inputs": {"question": "Refund window?"},
-         "outputs": {"answer": "30 days with receipt."},
-         "metadata": {"category": "policy"}},
-        {"inputs": {"question": "Reset password?"},
-         "outputs": {"answer": "Settings > Security > Reset."},
-         "metadata": {"category": "howto"}},
-    ],
+client.create_feedback(
+    run_id="RUN_ID",
+    key="user_rating",
+    score=1.0,
+    comment="Helpful answer",
 )
 ```
 
-Promote production failures: in UI open bad run -> `Add to dataset` -> fix
-`reference_outputs` -> it becomes a regression case. Filter first:
-`feedback:thumbs_down OR latency>8s`.
+Apply [redaction](https://docs.langchain.com/langsmith/mask-inputs-outputs),
+retention, workspace access controls, and sampling before production traffic is
+enabled. Avoid logging credentials, payment data, health data, or raw user
+documents unless your governance policy explicitly allows it.
 
-Splits: `train/validation/test` or `policy/howto` — evaluate per slice, not just global average.
-Version + tag datasets before CI (`v1.2-release`).
+## 7. Datasets
 
----
-
-## 6. Evaluators: code, LLM-as-judge, pairwise, human
-
-Evaluators are workspace-level scorers returning **feedback**:
-`{"key": ..., "score"|"value": ..., "comment": ...}`.
-
-| Type | Needs reference? | Offline | Online | Use for |
-| --- | --- | --- | --- | --- |
-| Code (deterministic) | sometimes | yes | yes | Exact match, schema, citations, latency |
-| LLM-as-judge | reference-free or based | yes | yes (free only) | Groundedness, helpfulness, safety |
-| Pairwise | no | yes | limited | A/B: which summary better? |
-| Human (annotation queue) | no | yes | yes | Gold labels, disputed cases |
-
-### 6.1 Code evaluators
-
-```python
-def exact_match(run, example):
-    pred = (run.outputs.get("answer") or "").strip().lower()
-    gold = (example.outputs.get("answer") or "").strip().lower()
-    return {"key": "exact_match", "score": float(pred == gold)}
-
-def has_citation(run, example):
-    text = run.outputs.get("answer") or ""
-    return {"key": "has_citation", "score": float("[1]" in text or "src=" in text),
-            "comment": "checks citation marker"}
-
-def valid_schema(run, example):
-    try:
-        assert isinstance(run.outputs, dict) and "answer" in run.outputs
-        return {"key": "valid_schema", "score": 1.0}
-    except AssertionError:
-        return {"key": "valid_schema", "score": 0.0}
-```
-
-### 6.2 LLM-as-judge (real usage)
-
-```python
-# pip install -U openevals langsmith
-from openevals import create_llm_as_judge
-from openevals.prompts import CORRECTNESS_PROMPT  # or RAG_GROUNDEDNESS_PROMPT
-
-correctness = create_llm_as_judge(
-    prompt=CORRECTNESS_PROMPT,
-    model="openai:gpt-5-mini",   # small grader is cheaper + often sufficient
-    feedback_key="correctness",
-)
-
-# custom rubric:
-groundedness = create_llm_as_judge(
-    prompt="Rate 0-1 whether ANSWER is fully supported by CONTEXT. Reply with score and reason.\n"
-           "CONTEXT:\n{context}\nANSWER:\n{answer}",
-    model="openai:gpt-5-mini",
-    feedback_key="groundedness",
-)
-```
-
-Tips: few-shot grader prompts beat zero-shot; grade with a **different**
-model family than generator when possible; always spot-check 20 grades by hand;
-log grader prompt version in metadata.
-
-### 6.3 Pairwise + human
-
-- Pairwise: compare `experiment A vs B` side-by-side in UI or `evaluate_pairwise`;
-  good when absolute scoring is hard (tone, summary quality).
-- Human: `Annotation queues` — single-run (label one trace against rubric) or
-  pairwise (pick better of two). Export labels -> dataset -> future offline evals.
-
----
-
-## 7. Offline experiments (pre-deployment)
+Datasets turn expected behavior into repeatable tests:
 
 ```python
 from langsmith import Client
-from langsmith.evaluation import evaluate
+
+client = Client()
+dataset = client.create_dataset(
+    dataset_name="support-regression-v1",
+    description="Curated support questions",
+)
+client.create_examples(
+    inputs=[
+        {"question": "What is the refund window?"},
+        {"question": "How do I reset my password?"},
+    ],
+    outputs=[
+        {"answer": "Contact support with a receipt."},
+        {"answer": "Use the security settings page."},
+    ],
+    dataset_id=dataset.id,
+)
+```
+
+Datasets can be created from SDK code, CSV/JSON, traces, or the UI. Store
+metadata such as category, expected source, difficulty, and version. Split data
+into development, validation, and test sets. See [manage datasets](https://docs.langchain.com/langsmith/manage-datasets).
+
+## 8. Evaluators
+
+### Deterministic evaluator
+
+```python
+def has_answer(run, example):
+    output = run.outputs or {}
+    text = str(output.get("answer", ""))
+    return {
+        "key": "has_answer",
+        "score": float(bool(text.strip())),
+        "comment": "Output must contain non-empty answer text.",
+    }
+```
+
+### LLM-as-judge
+
+```python
+from openevals.llm import create_llm_as_judge
+
+judge = create_llm_as_judge(
+    prompt=(
+        "Score whether the answer is grounded in the context from 0 to 1.\n"
+        "Context: {context}\nAnswer: {answer}"
+    ),
+    feedback_key="groundedness",
+    model="PROVIDER:GRADER_MODEL_NAME",
+)
+```
+
+Evaluators may be reference-based, reference-free, pairwise, or human. Use
+deterministic checks for schemas, citations, and exact values; use judges for
+groundedness, helpfulness, tone, and safety; spot-check judge results manually.
+See [LLM-as-judge](https://docs.langchain.com/langsmith/llm-as-judge),
+[evaluation types](https://docs.langchain.com/langsmith/evaluation-types), and
+[annotation queues](https://docs.langchain.com/langsmith/annotation-queues).
+
+```mermaid
+flowchart TB
+    R[Run output] --> C[Code evaluator]
+    R --> J[LLM judge]
+    R --> H[Human annotation]
+    C --> F[Feedback scores]
+    J --> F
+    H --> F
+    F --> A{Meets release threshold?}
+    A -->|Yes| Ship[Release candidate]
+    A -->|No| Fix[Inspect trace and improve]
+    Fix --> R
+```
+
+## 9. Offline experiments
+
+Evaluate the application target against a dataset before changing production:
+
+```python
+from langsmith import evaluate
 
 def target(inputs: dict) -> dict:
-    # your app under test: must take example.inputs, return dict
-    return {"answer": rag_chain.invoke(inputs["question"])}
+    answer = "YOUR_APPLICATION_CALL(inputs['question'])"
+    return {"answer": answer}
 
 results = evaluate(
     target,
-    data="support-gold-v1",
-    evaluators=[exact_match, has_citation, correctness],
-    experiment_prefix="rag-prompt-v4-k4",
+    data="support-regression-v1",
+    evaluators=[has_answer, judge],
+    experiment_prefix="support-model-candidate",
     max_concurrency=4,
 )
 print(results)
 ```
 
-Compare experiments: prompt-v3 vs v4, `k=2 vs 4`, `gpt-5-mini vs sonnet`, chunk 400 vs 800.
-Do not trust one-off manual tests — require experiment win before merging.
+Use `evaluate` for a target function, `aevaluate` for async applications, and
+experiment comparison in the UI or SDK. Track quality, latency, token usage,
+cost, tool success, citation validity, and safety separately. See [evaluation quickstart](https://docs.langchain.com/langsmith/evaluation-quickstart).
 
-pytest integration exists (`langsmith.pytest`) so evals run in CI like tests;
-assert on metrics (e.g. `correctness >= 0.85`) to block regressions.
+```mermaid
+sequenceDiagram
+    participant Dataset
+    participant Target
+    participant Evaluator
+    participant LangSmith
+    Dataset->>Target: inputs for example
+    Target-->>LangSmith: traced prediction
+    LangSmith->>Evaluator: prediction + reference
+    Evaluator-->>LangSmith: score and comment
+    LangSmith-->>Dataset: experiment aggregate
+```
 
----
+## 10. Online evaluation and monitoring
 
-## 8. Online evaluation + monitoring (post-deployment)
+Online evaluators score sampled production runs or threads without requiring a
+gold answer. Monitor error rate, p50/p95 latency, token cost, empty retrieval,
+tool failures, refusal rate, groundedness, and negative user feedback. Convert
+important failures into dataset examples and fix them through an offline
+experiment before deploying a new version.
 
-Online evals score **live runs/threads** (no reference outputs). Attach evaluators
-to a tracing project with sampling + filters + spend limits.
+Useful platform features include trace filters, dashboards, alerts, annotation
+queues, evaluator sampling, cost tracking, and [online evaluations](https://docs.langchain.com/langsmith/online-evaluations).
 
-Monitor:
+## 11. Prompts and model configurations
 
-- error rate, p50/p95 latency, tokens/$, refusal rate, empty-retrieval rate,
-- `groundedness` (reference-free judge), toxicity/PII, tool failure rate,
-- user `thumbs_down` rate per `app_version`.
+Use the prompt workspace to create, commit, label, pull, and compare prompt
+versions. Keep prompt changes separate from model changes when possible.
 
-Loop:
+```python
+from langsmith import Client
+
+client = Client()
+client.push_prompt(
+    "support-assistant",
+    object="You are a concise support assistant. Context: {context}",
+)
+prompt = client.pull_prompt("support-assistant")
+```
+
+The exact prompt object format depends on whether the prompt is a chat prompt or
+text prompt. See [manage prompts](https://docs.langchain.com/langsmith/manage-prompts)
+and [prompt commits](https://docs.langchain.com/langsmith/prompt-commit).
+
+## 12. Studio and deployment
+
+LangSmith Studio is an interactive environment for inspecting graph state,
+testing inputs, viewing traces, and iterating on agent behavior. See [Studio](https://docs.langchain.com/langsmith/studio)
+and [local Studio usage](https://docs.langchain.com/langsmith/use-studio).
+
+Deployment options include managed LangSmith deployment, a standalone agent
+server, and self-hosted installations. Production concerns include authentication,
+revisions, environment variables, scaling, persistence, secrets, networking,
+custom routes, and rollback. See [deployment](https://docs.langchain.com/langsmith/deployment),
+[agent server](https://docs.langchain.com/langsmith/agent-server),
+[self-hosting](https://docs.langchain.com/langsmith/self-hosted), and
+[Kubernetes](https://docs.langchain.com/langsmith/kubernetes).
+
+For Docker and Kubernetes, keep the application image immutable, inject secrets
+at runtime, persist checkpointer/store data separately, expose health checks,
+and send traces to a dedicated project. Do not treat tracing as a substitute for
+application metrics or incident response.
 
 ```mermaid
 flowchart LR
-    Prod[Production traces] --> Mon[Online evaluators + alerts]
-    Mon --> Q[Annotation queue]
-    Q --> D[Add to dataset]
-    D --> Exp[Offline experiment fixes]
-    Exp --> Prod
+    Code[Application code] --> Build[Immutable image / build]
+    Build --> Run[Cloud or self-hosted Agent Server]
+    Secrets[Runtime secrets] --> Run
+    Store[(Checkpointer / Store)] --> Run
+    Run --> API[Threads, runs, streaming API]
+    Run --> LS[LangSmith traces]
+    LS --> Ops[Dashboards, alerts, evaluations]
 ```
 
-When users report failures, convert those traces to dataset examples **same day**.
+## 13. SDK and CLI surface
 
----
+Frequently used Python SDK areas include:
 
-## 9. Practical considerations
+| API | Purpose |
+| --- | --- |
+| `Client` | datasets, examples, prompts, runs, feedback, projects |
+| `traceable` | trace arbitrary sync/async functions |
+| `trace` | create a parent trace context |
+| `RunTree` | low-level nested run construction |
+| `evaluate` / `aevaluate` | offline experiments |
+| `create_feedback` | attach human or application feedback |
+| dataset methods | create, update, clone, and query test cases |
+| prompt methods | push, pull, commit, and tag prompts |
 
-- Redact PII at the edge (`process_inputs`), set retention + access policies per env.
-- Separate projects: `app-dev`, `app-staging`, `app-prod`; tag `app_version`, `env`.
-- Sampling: 100% in dev, sampled (e.g. 10%) + all errors in prod to control spend.
-- Evaluator spend limits: cap LLM-judge tokens per project/dataset.
-- Prompt Hub: version prompts, don't hardcode strings in 5 files.
+The [CLI guide](https://docs.langchain.com/langsmith/cli) covers login, local
+development, projects, datasets, and operational commands. Check the current
+[API reference](https://reference.langchain.com/python/langsmith/) for signatures
+and parameter changes.
 
-## 10. Summary cheat sheet
+## 14. Complete mini-project: traced support evaluation
 
-- Observability = logs + metrics + **traces**; LLM apps live in traces.
-- Model: run < trace < thread < trajectory, all inside a project.
-- `@traceable(name, tags, metadata)` traces anything; `config` propagates tags/`thread_id`.
-- Datasets (`inputs/outputs/metadata`) + experiments = regression testing.
-- Evaluators: code (exact/schema/citation) + LLM-as-judge (correctness/groundedness) + pairwise + human queues.
-- Online finds issues -> offline proves fixes -> online confirms.
+This project is runnable after configuring credentials and replacing placeholders.
+It demonstrates a traced target, a dataset, a deterministic evaluator, and an
+offline experiment.
 
-## 11. Resources and references
+```python
+"""evaluate_support.py"""
+import os
 
-- Observability concepts: <https://docs.langchain.com/langsmith/observability-concepts>
-- Evaluation concepts: <https://docs.langchain.com/langsmith/evaluation-concepts>
-- Tracing quickstart: <https://docs.langchain.com/langsmith/trace-with-langchain>
-- Annotate code: <https://docs.langchain.com/langsmith/annotate-code>
-- LLM-as-judge: <https://docs.langchain.com/langsmith/llm-as-judge>
-- Datasets: <https://docs.langchain.com/langsmith/manage-datasets>
-- MCP servers (in `.opencode/opencode.json`): `https://docs.langchain.com/mcp`, `https://reference.langchain.com/mcp`
+from langsmith import Client, evaluate, traceable
 
-## 12. Self-check questions
 
-1. Trace vs thread vs trajectory — which view answers "why did this one request fail"?
-2. Write `@traceable` for a `retrieve()` fn with tags + redacted inputs.
-3. When can you use reference-based evaluators vs reference-free ones?
-4. Sketch the loop from a production `thumbs_down` to a new dataset example to a passing experiment.
-5. Which 5 metrics would you alert on for a prod RAG bot and why?
+@traceable(name="support_answer")
+def answer_question(question: str) -> dict:
+    # Replace with a real LangChain agent or application call.
+    return {"answer": f"Demo answer for: {question}"}
+
+
+def target(inputs: dict) -> dict:
+    return answer_question(inputs["question"])
+
+
+def non_empty_answer(run, example):
+    answer = (run.outputs or {}).get("answer", "")
+    return {"key": "non_empty_answer", "score": float(bool(answer.strip()))}
+
+
+def main() -> None:
+    required = ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT"]
+    missing = [name for name in required if not os.environ.get(name)]
+    if missing:
+        raise RuntimeError(f"Set these environment variables first: {missing}")
+
+    client = Client()
+    dataset = client.create_dataset(
+        dataset_name="support-handbook-demo",
+        description="Small regression dataset for the handbook project",
+    )
+    client.create_examples(
+        inputs=[{"question": "What is the refund policy?"}],
+        outputs=[{"answer": "A human reviews refund requests."}],
+        dataset_id=dataset.id,
+    )
+    results = evaluate(
+        target,
+        data=dataset.id,
+        evaluators=[non_empty_answer],
+        experiment_prefix="support-demo",
+    )
+    print(results)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Replace the demo target with a real agent, add reference-based correctness and
+groundedness evaluators, then configure sampling and privacy policies before
+using production data.
+
+## 15. Migration and operating checklist
+
+- Add tracing before adding complex agent behavior.
+- Version prompts and datasets; do not rely on ad hoc manual tests.
+- Keep test and production projects separate.
+- Turn production failures into regression examples.
+- Compare experiments on slices, not only global averages.
+- Redact inputs and outputs before transmission.
+- Set evaluator spend and trace retention limits.
+- Use least-privilege workspace access and rotate keys.
+- Pin SDK versions and review [release stages](https://docs.langchain.com/langsmith/release-stages).
+
+## Further references
+
+- [Observability quickstart](https://docs.langchain.com/langsmith/observability-quickstart)
+- [Tracing concepts](https://docs.langchain.com/langsmith/observability-concepts)
+- [Evaluation concepts](https://docs.langchain.com/langsmith/evaluation-concepts)
+- [Datasets](https://docs.langchain.com/langsmith/manage-datasets)
+- [Experiments](https://docs.langchain.com/langsmith/compare-experiment-results)
+- [Feedback](https://docs.langchain.com/langsmith/attach-user-feedback)
+- [Python SDK](https://docs.langchain.com/langsmith/smith-python-sdk)
